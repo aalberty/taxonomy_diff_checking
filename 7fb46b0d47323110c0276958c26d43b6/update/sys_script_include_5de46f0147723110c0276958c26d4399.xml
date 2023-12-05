@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_script_include">
+    <sys_script_include action="INSERT_OR_UPDATE">
+        <access>public</access>
+        <active>true</active>
+        <api_name>x_324004_tdc.Taxonomy</api_name>
+        <caller_access/>
+        <client_callable>false</client_callable>
+        <description/>
+        <name>Taxonomy</name>
+        <script><![CDATA[var Taxonomy = {};
+
+var constants = x_324004_tdc.TaxonomyConstants;
+var util = new global.TaxonomyUtil();
+
+Taxonomy.encodeTaxonomies = function () {
+	var taxonomies = [];
+	var data;
+	var topics;
+	var content;
+	var taxGr = new GlideRecord("taxonomy");
+	taxGr.query();
+	
+	while (taxGr.next()) {
+		data = Taxonomy.encodeTaxonomy(taxGr);
+		data.topics = util.getTopicsHierarchy(taxGr.getUniqueValue()); //SN util refers to content as "items" in the resulting JSON
+		taxonomies.push(data);
+	}
+
+	return taxonomies;
+};
+
+Taxonomy.encodeTaxonomy = function (record) {
+	return encodeRecord(record, constants.TAXONOMY_FIELDS);
+};
+
+Taxonomy.encodeTopic = function (record) {
+	return encodeRecord(record, constants.TOPIC_FIELDS);
+};
+
+Taxonomy.encodeContent = function (record) {
+	if (record.sys_class_name == 'kb_knowledge')
+		return encodeRecord(record, constants.KNOWLEDGE_FIELDS);
+	else if (record.sys_class_name == 'sn_ex_sp_quick_link')
+		return encodeRecord(record, constants.QUICK_LINK_FIELDS);
+	else
+		return encodeRecord(record, constants.CAT_ITEM_FIELDS);
+};
+
+function encodeRecord (record, fieldArr) {
+	var data = {};
+	
+	fieldArr.forEach(function (field) {
+		var value = record[field].getDisplayValue();
+		var url = "";
+		
+		data[field] = {'value': value};
+		
+		if (isRefField(record, field)) {
+			var refRec = record[field].getRefRecord();
+			data[field].url = buildRefURL(refRec);
+		}
+		
+	});
+	
+	return data;
+} 
+
+function isRefField (record, field) {
+	var isReference = false;
+	try {
+		isReference = record[field].getED().getInternalType() == 'reference';
+	} catch (e) {
+		gs.warn("The type of the field {0} cannot be determined for record {1}", field, record);
+	}
+	
+	return isReference;
+}
+
+function buildRefURL (record) {
+	return "/" + record.sys_class_name + ".do?sys_id=" + record.getUniqueValue();
+}
+
+
+
+class TaxonomyNode {
+	constructor (id, name, parent) {
+		this.id = id;
+		this.name = name;
+		this.parent = parent;
+		this.isLeaf = !parent;
+	}
+
+	toJson () {
+		return {
+			id: this.id,
+			name: this.name,
+			parent: this.parent,
+			children: []
+		}
+	}
+}
+
+Taxonomy.test = function () {
+	var taxId = '1f5d5a40c3203010069aec4b7d40dd93';
+	var util = new global.TaxonomyUtil();
+	var topicsGr = util.getTaxonomyTopics(taxId, true);
+	var topics = [];
+
+	while (topicsGr.next()) {
+		topics.push(new TaxonomyNode(
+			topicsGr.getUniqueValue(),
+			topicsGr.getValue("name"),
+			topicsGr.getValue("parent_topic")
+		));
+	}
+
+	gs.debug('Starting list of topics in taxonomy: {0}', JSON.stringify(topics));
+
+	var tree = [];
+	return buildTree(topics, tree, []);
+}
+
+function buildTree (topics, tree, targetParents) {
+	if (topics.length == 0) {
+		return tree;
+	}
+
+	var remainingTopics = [];
+	var newTargetParents = [];
+	
+	if (tree.length == 0) { //first pass
+		topics.forEach(function (topic) {
+			if (topic.isLeaf === true) {
+				tree.push(topic.toJson());
+				newTargetParents.push(topic.parent);
+			}
+
+			else {
+				remainingTopics.push(topic);
+			}
+		});
+	}
+
+	//TODO: rewrite using ArrayUtil (contains, filter, etc)
+	var toRemove = [];
+	topics.forEach(function (topic) {
+		if (targetParents.indexOf(topic.id) > -1) {
+			tree.push(topic.toJson());
+			newTargetParents.push(topic.parent);
+
+			for (var i = 0; i < tree.length; i++) {
+				var topLevelTopic = tree[i];
+
+				if (topLevelTopic.parent == topic.id) {
+					topic.children.push(topLevelTopic);
+					toRemove.push(i);
+				}
+			}
+
+			//Sort indexes in descending order so removing one doesn't
+			//impact the index of the next ele you want removed
+			toremove.sort(function(a, b){return b-a}); 
+
+			toRemove.forEach(function (index) {
+				delete topic[index];
+			});
+
+		}
+	});
+
+	return this.buildTree(remainingTopics, tree, newTargetParents);
+}
+
+]]></script>
+        <sys_class_name>sys_script_include</sys_class_name>
+        <sys_created_by>talberty</sys_created_by>
+        <sys_created_on>2023-11-27 20:23:35</sys_created_on>
+        <sys_id>5de46f0147723110c0276958c26d4399</sys_id>
+        <sys_mod_count>67</sys_mod_count>
+        <sys_name>Taxonomy</sys_name>
+        <sys_package display_value="Taxonomy Diff Checker" source="x_324004_tdc">7fb46b0d47323110c0276958c26d43b6</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="Taxonomy Diff Checker">7fb46b0d47323110c0276958c26d43b6</sys_scope>
+        <sys_update_name>sys_script_include_5de46f0147723110c0276958c26d4399</sys_update_name>
+        <sys_updated_by>talberty</sys_updated_by>
+        <sys_updated_on>2023-11-30 15:30:32</sys_updated_on>
+    </sys_script_include>
+</record_update>
